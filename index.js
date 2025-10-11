@@ -35,7 +35,16 @@ const client = new Client({
     }),
     puppeteer: {
         headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox']
+        args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-accelerated-2d-canvas',
+            '--no-first-run',
+            '--no-zygote',
+            '--single-process',
+            '--disable-gpu'
+        ]
     }
 });
 
@@ -45,14 +54,14 @@ const client = new Client({
 client.on('qr', async qr => {
     latestQRCode = await qrcode.toDataURL(qr);
     isReady = false;
-    console.log('✅ QR Code generated — scan it in the browser to log in.');
+    console.log('📱 QR Code generated — scan it in the browser to log in.');
 });
 
 // ------------------
 // Ready event
 // ------------------
 client.on('ready', () => {
-    console.log('🤖 WhatsApp bot is ready and connected!');
+    console.log('✅ WhatsApp bot is ready and connected!');
     isReady = true;
 });
 
@@ -60,10 +69,10 @@ client.on('ready', () => {
 // Handle disconnection & auto-reconnect
 // ------------------
 client.on('disconnected', reason => {
-    console.log(`⚠️ Disconnected due to: ${reason}`);
+    console.log(`⚠️ Disconnected: ${reason}`);
     isReady = false;
     console.log('♻️ Reinitializing client in 5 seconds...');
-    setTimeout(() => client.initialize(), 5000);
+    setTimeout(startClient, 5000);
 });
 
 // ------------------
@@ -83,23 +92,32 @@ client.on('message', async msg => {
         const replyMessage = 'Hello! 👋 Thanks for messaging IBETIN. We will get back to you shortly.';
         try {
             await msg.reply(replyMessage);
-            console.log(`✅ Auto-reply sent to new private number: ${sender}`);
+            console.log(`✅ Auto-reply sent to: ${sender}`);
 
-            // Save this number to memory & file
+            // Save number to memory & file
             repliedNumbers.push(sender);
-            fs.writeFileSync(DATA_FILE, JSON.stringify(repliedNumbers));
+            fs.writeFileSync(DATA_FILE, JSON.stringify(repliedNumbers, null, 2));
         } catch (err) {
             console.error(`❌ Failed to send auto-reply to ${sender}:`, err);
         }
     } else {
-        console.log(`ℹ️ Message from existing number: ${sender}, no auto-reply sent.`);
+        console.log(`ℹ️ Already replied to ${sender}, skipping.`);
     }
 });
 
 // ------------------
-// Initialize client
+// Initialize client with retry
 // ------------------
-client.initialize();
+async function startClient() {
+    try {
+        await client.initialize();
+    } catch (error) {
+        console.error('❌ Client initialization failed:', error.message);
+        console.log('♻️ Retrying in 5 seconds...');
+        setTimeout(startClient, 5000);
+    }
+}
+startClient();
 
 // ------------------
 // Express route for QR/status
@@ -130,7 +148,3 @@ app.get('/', (req, res) => {
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`🌐 Server running on port ${PORT}`);
 });
-
-
-
-
